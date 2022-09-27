@@ -1,0 +1,32 @@
+#!/usr/bin/env python3
+
+import socket
+import argparse
+import sys
+
+parser = argparse.ArgumentParser("FTP Client")
+parser.add_argument("operation", help="Operations are: ls <URL>, mkdir <URL>, rm <URL>, rmdir <URL>, cp <ARG1> <ARG2>, mv <ARG1> <ARG2>", type=str)
+parser.add_argument("args", type=str, nargs='+')
+parser.add_argument("-v", "--verbose", help="Print all messages to and from the FTP server", action="store_true")
+parser_args = parser.parse_args()
+
+def ftp_client():
+    print("hello world")
+    print(parser)
+    print(parser_args)
+
+    op_list = ["ls", "mkdir", "rm", "rmdir", "cp", "mv"]
+
+    print(len(parser_args.args) > 1)
+
+    #Exit if the incorrect amount of arguments are passed compared to operation selected
+    if (len(parser_args.args) > 2) or (parser_args.operation not in op_list[4:6] and len(parser_args.args) > 1):
+        print("Invalid amount of arguments")
+        sys.exit(1)
+    elif (parser_args.operation not in op_list[4:6]) and len(parser_args.args) > 1:
+        print("Invalid amount of arguments")
+        sys.exit(1)
+
+if __name__ == '__main__':
+    ftp_client()
+    
