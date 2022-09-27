@@ -3,6 +3,10 @@
 import socket
 import argparse
 import sys
+from types import NoneType
+from urllib.parse import urlparse
+
+TCP_PORT = 21
 
 parser = argparse.ArgumentParser("FTP Client")
 parser.add_argument("operation", help="Operations are: ls <URL>, mkdir <URL>, rm <URL>, rmdir <URL>, cp <ARG1> <ARG2>, mv <ARG1> <ARG2>", type=str)
@@ -10,6 +14,18 @@ parser.add_argument("args", type=str, nargs='+')
 parser.add_argument("-v", "--verbose", help="Print all messages to and from the FTP server", action="store_true")
 parser_args = parser.parse_args()
 
+# Handles the similar operations that take a single argument - ls, mkdir, rm, and rmdir
+def single_arg_op():
+    url = urlparse(parser_args.args[0])
+    if isinstance(url.username, None):
+        username = "anonymous"
+    else:
+        username = url.username
+    
+    has_password = isinstance(url.password, None)
+    password = url.password
+
+# Main function of the program - handles the argument inputs and starts the connection with the FTP server
 def ftp_client():
     print("hello world")
     print(parser)
@@ -17,15 +33,40 @@ def ftp_client():
 
     op_list = ["ls", "mkdir", "rm", "rmdir", "cp", "mv"]
 
-    print(len(parser_args.args) > 1)
+    cp_or_mv = parser_args.operation in op_list[4:6]
+
+    #Exit if an unacceptable operation is given
+    if parser_args.operation not in op_list:
+        print("Invalid operation")
+        sys.exit(1)
 
     #Exit if the incorrect amount of arguments are passed compared to operation selected
-    if (len(parser_args.args) > 2) or (parser_args.operation not in op_list[4:6] and len(parser_args.args) > 1):
+    if (len(parser_args.args) > 2) or (not cp_or_mv and len(parser_args.args) > 1):
         print("Invalid amount of arguments")
         sys.exit(1)
-    elif (parser_args.operation not in op_list[4:6]) and len(parser_args.args) > 1:
+    elif (cp_or_mv) and len(parser_args.args) < 2:
         print("Invalid amount of arguments")
         sys.exit(1)
+
+    # Parse arguments to retrieve path, username, password
+    url1 = urlparse(parser_args.args[0])
+    if url1.scheme == 'ftp':
+        hostname = url1.hostname
+        ftp_index = 0
+    elif urlparse(parser_args.args[1]).scheme == 'ftp':
+        url2 = urlparse(parser_args[1])
+        hostname = url2.hostname
+        ftp_index = 1
+    else:
+        print("Hostname error")
+        sys.exit(1)
+    
+    username = urlparse(parser_args.args[ftp_index]).username
+    if username == None:
+        username = "anonymous"
+
+    #Can be 'None' - affects connect process
+    password = parser_args.args[ftp_index].password
 
 if __name__ == '__main__':
     ftp_client()
