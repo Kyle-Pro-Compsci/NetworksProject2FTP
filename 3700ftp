@@ -16,14 +16,68 @@ parser_args = parser.parse_args()
 
 # Handles the similar operations that take a single argument - ls, mkdir, rm, and rmdir
 def single_arg_op():
-    url = urlparse(parser_args.args[0])
-    if isinstance(url.username, None):
-        username = "anonymous"
+    print("to do")
+
+# Send the username to the server
+def send_user(sock, username):
+
+    print("to do")
+
+# Parses the arguments passed into the program to retrieve hostname, username and password. Returns these values as strings in a tuple.
+def parse_args():
+    url1 = urlparse(parser_args.args[0])
+    if url1.scheme == 'ftp':
+        hostname = url1.hostname
+        ftp_index = 0
+    elif urlparse(parser_args.args[1]).scheme == 'ftp':
+        url2 = urlparse(parser_args[1])
+        hostname = url2.hostname
+        ftp_index = 1
     else:
-        username = url.username
+        print("Hostname error")
+        sys.exit(1)
     
-    has_password = isinstance(url.password, None)
-    password = url.password
+    username = urlparse(parser_args.args[ftp_index]).username
+    if username == None:
+        username = "anonymous"
+
+    #Can be 'None' - affects connect process
+    password = urlparse(parser_args.args[ftp_index]).password
+
+    return hostname, username, password
+
+# Performs the opening connections with the FTP server, sending the username and password (if given)
+# Forms the control socket and the data channel
+def start_connection(hostname, username, password):
+    control_sock = socket.socket()
+    control_sock.connect((hostname, TCP_PORT))
+
+    response = control_sock.recv(1024)
+    print(type(response))
+    print(response)
+    decoded_response = response.decode('UTF-8')
+    print("decoded response")
+    print(type(decoded_response))
+    print(decoded_response)
+    print('\r\n' in decoded_response)
+
+    control_sock.send(("USER " + username + "\r\n").encode())
+    
+    response = control_sock.recv(1024)
+    print(response)
+
+    print("password: ", password)
+    if password != None:
+        print("sending password")
+        control_sock.send(("PASS " + password + "\r\n").encode())
+        response = control_sock.recv(1024)
+        print(response)
+
+# Parses and receives a response from the FTP server. Wait for a \r\n before finishing receiving.
+def receive_response(sock):
+    response = sock.recv(1024)
+
+    print("to do")
 
 # Main function of the program - handles the argument inputs and starts the connection with the FTP server
 def ftp_client():
@@ -49,25 +103,15 @@ def ftp_client():
         sys.exit(1)
 
     # Parse arguments to retrieve path, username, password
-    url1 = urlparse(parser_args.args[0])
-    if url1.scheme == 'ftp':
-        hostname = url1.hostname
-        ftp_index = 0
-    elif urlparse(parser_args.args[1]).scheme == 'ftp':
-        url2 = urlparse(parser_args[1])
-        hostname = url2.hostname
-        ftp_index = 1
-    else:
-        print("Hostname error")
-        sys.exit(1)
-    
-    username = urlparse(parser_args.args[ftp_index]).username
-    if username == None:
-        username = "anonymous"
+    hostname, username, password = parse_args()
 
-    #Can be 'None' - affects connect process
-    password = parser_args.args[ftp_index].password
+    #Start Connection
+    start_connection(hostname, username, password)
+    
+
 
 if __name__ == '__main__':
     ftp_client()
     
+#ftp://ftp.3700.network
+#python 3700ftp ls ftp://kook:O5UCntxHDi7vzdl8Weqh@ftp.3700.network
