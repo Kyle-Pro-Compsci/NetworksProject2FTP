@@ -83,7 +83,6 @@ def start_connection(hostname, port, username, password):
     response = receive_response(control_sock)
     verbose(response)
 
-    print("password: ", password)
     if password != None:
         verbose("Sending password...")
         control_sock.send(("PASS " + password + "\r\n").encode())
@@ -189,8 +188,6 @@ def cp(control_sock, path1, path2, to_local, delete_after = False):
         data_sock = socket.socket()
         data_sock.connect((ip, port))
         data_response = receive_data(data_sock)
-        print(type(data_response))
-        print("data response: ", data_response)
         response = receive_response(control_sock)
         verbose(response)
         # Write data to file
@@ -268,6 +265,10 @@ def ftp_client():
     control_sock = start_connection(hostname, port, username, password)
 
     select_operation(control_sock, path1, path2, to_local)
+
+    control_sock.close()
+    verbose("Program complete.")
+    sys.exit(0)
 
 
 if __name__ == '__main__':
