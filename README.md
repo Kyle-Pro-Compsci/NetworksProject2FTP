@@ -1,5 +1,3 @@
-Under construction
-
 This project was written in Python and implements a basic set of FTP client functionality. One operation can be performed when the client (3700ftp) is called via the command line. There are two to three arguments passed in, depending on the operation. The supported operations are: ls (path1), mkdir (path1), rm (path1), rmdir (path1), cp (path1) (path2), mv (path1) (path2). Exactly one path argument must be a FTP URL. Optionally included in this path is the given username, password, and port.
 The program also supports the flags -h --help and -v --verbose. Adding -h gives a brief overview of the program. Adding -v makes the program print all messages with the server to std out.
 
@@ -23,4 +21,6 @@ In order to avoid race conditions from the command socket, I implemented a recei
 
 The mv and cp operations were implemented with a single function, with an optional delete_after flag that deletes the file after it is copied should the operation be mv instead of cp.
 
-3700ftp currently doesn't support uploading or downloading more complicated file types.
+The biggest challenge was in receiving a large amount of data in the data channel without an having an exit character to rely on to close a loop. Since the data received would all by in the 'bytes' class, a byte array was used to collect the potentially piecemeal data. I chose to loop until a byte package of length 0 was received, which should indicate the socket being closed.
+
+For testing, I used a log function that prints its input. This makes it easy to spread them all around the code and toggle them on or off. Also, as I'm still building my familiarity with Python, I created a test file with different functions that can be called to test individual bits of python functionality.

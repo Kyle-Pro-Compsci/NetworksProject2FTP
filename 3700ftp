@@ -15,12 +15,14 @@ parser_args = parser.parse_args()
 
 # Easily accessible function that prints outputs - for testing
 def log(to_print):
-    print(to_print)
+    #print(to_print)
+    return
 
 # Prints server responses if the verbose flag is raised
 def verbose(to_print):
     if parser_args.verbose:
         print(to_print)
+    return
 
 # Parses the arguments passed into the program to retrieve hostname, username and password. Returns these values as strings in a tuple.
 def parse_args():
@@ -50,8 +52,7 @@ def parse_args():
         password = url2.password
         to_local = False
     else:
-        print("Hostname error")
-        sys.exit(1)
+        raise Exception("Hostname error")
 
     if username == None:
         username = "anonymous"
@@ -124,8 +125,16 @@ def receive_response(control_sock):
 
 # Receives a data package from the FTP server. Ends on socket closing, instead of waiting for \r\n.
 def receive_data(data_sock):
-    response = data_sock.recv(1024)
-    return response
+    data_array = bytearray()
+    while True:
+        response = data_sock.recv(1024)
+        log("response len")
+        log(len(response))
+        data_array += bytearray(response)
+        if (len(response) == 0):
+            break
+
+    return bytes(data_array)
 
 
 # ----------------------- Operations -------------------------
@@ -168,6 +177,7 @@ def rmdir(control_sock, path):
     verbose(response)
     return
 
+# Performs a 
 def rm(control_sock, path):
     log("entering rm")
     rm_request = "DELE " + path + "\r\n"
@@ -251,11 +261,9 @@ def ftp_client():
 
     #Exit if the incorrect amount of arguments are passed compared to operation selected
     if (len(parser_args.args) > 2) or (not cp_or_mv and len(parser_args.args) > 1):
-        print("Invalid amount of arguments")
-        sys.exit(1)
+        raise Exception("Invalid amount of arguments")
     elif (cp_or_mv) and len(parser_args.args) < 2:
-        print("Invalid amount of arguments")
-        sys.exit(1)
+        raise Exception("Invalid amount of arguments")
 
     # Parse arguments to retrieve path, username, password
     hostname, port, username, password, path1, path2, to_local = parse_args()
@@ -264,8 +272,12 @@ def ftp_client():
     #Start Connection
     control_sock = start_connection(hostname, port, username, password)
 
+    #Perform the given operation
     select_operation(control_sock, path1, path2, to_local)
 
+    #Exit sequence
+    control_sock.send("QUIT\r\n".encode())
+    verbose(receive_response(control_sock))
     control_sock.close()
     verbose("Program complete.")
     sys.exit(0)
