@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 
+import re
 import socket
 import argparse
 import sys
 from types import NoneType
+from unittest.mock import DEFAULT
 from urllib.parse import urlparse
-
-TCP_PORT = 21
 
 parser = argparse.ArgumentParser("FTP Client")
 parser.add_argument("operation", help="Operations are: ls <URL>, mkdir <URL>, rm <URL>, rmdir <URL>, cp <ARG1> <ARG2>, mv <ARG1> <ARG2>", type=str)
@@ -14,76 +14,228 @@ parser.add_argument("args", type=str, nargs='+')
 parser.add_argument("-v", "--verbose", help="Print all messages to and from the FTP server", action="store_true")
 parser_args = parser.parse_args()
 
-# Handles the similar operations that take a single argument - ls, mkdir, rm, and rmdir
-def single_arg_op():
-    print("to do")
+# Easily accessible function that prints outputs - for testing
+def log(to_print):
+    print(to_print)
 
-# Send the username to the server
-def send_user(sock, username):
-
-    print("to do")
+# Prints server responses if the verbose flag is raised
+def verbose(to_print):
+    if parser_args.verbose:
+        print(to_print)
 
 # Parses the arguments passed into the program to retrieve hostname, username and password. Returns these values as strings in a tuple.
 def parse_args():
     url1 = urlparse(parser_args.args[0])
+    log(url1)
+    log("port")
+    log(url1.port)
+    path1 = None
+    path2 = None
+    two_args = len(parser_args.args) > 1
+    log("two args:")
+    log(two_args)
+    to_local = None
+
+    if two_args:
+        url2 = urlparse(parser_args.args[1])
+
     if url1.scheme == 'ftp':
         hostname = url1.hostname
-        ftp_index = 0
+        port = url1.port
+        username = url1.username
+        password = url1.password
+        to_local = True
     elif urlparse(parser_args.args[1]).scheme == 'ftp':
-        url2 = urlparse(parser_args[1])
         hostname = url2.hostname
-        ftp_index = 1
+        port = url2.port
+        username = url2.username
+        password = url2.password
+        to_local = False
     else:
         print("Hostname error")
         sys.exit(1)
-    
-    username = urlparse(parser_args.args[ftp_index]).username
+
     if username == None:
         username = "anonymous"
 
-    #Can be 'None' - affects connect process
-    password = urlparse(parser_args.args[ftp_index]).password
+    if port == None:
+        port = 21
 
-    return hostname, username, password
+    # Sort out paths depending on type and number of arguments
+    path1 = url1.path
+    if two_args:
+        path2 = url2.path
+
+    return hostname, port, username, password, path1, path2, to_local
 
 # Performs the opening connections with the FTP server, sending the username and password (if given)
 # Forms the control socket and the data channel
-def start_connection(hostname, username, password):
+def start_connection(hostname, port, username, password):
     control_sock = socket.socket()
-    control_sock.connect((hostname, TCP_PORT))
+    log("control sock return")
+    control_sock.connect((hostname, port))
 
-    response = control_sock.recv(1024)
-    print(type(response))
-    print(response)
-    decoded_response = response.decode('UTF-8')
-    print("decoded response")
-    print(type(decoded_response))
-    print(decoded_response)
-    print('\r\n' in decoded_response)
+    response = receive_response(control_sock)
+    log(response)
+    verbose(response)
 
+    verbose("Logging in with username " + username + "...")
     control_sock.send(("USER " + username + "\r\n").encode())
     
-    response = control_sock.recv(1024)
-    print(response)
+    response = receive_response(control_sock)
+    verbose(response)
 
     print("password: ", password)
     if password != None:
-        print("sending password")
+        verbose("Sending password...")
         control_sock.send(("PASS " + password + "\r\n").encode())
-        response = control_sock.recv(1024)
-        print(response)
+        response = receive_response(control_sock)
+        verbose(response)
+
+    return control_sock
+
+# Request a data channel and return its ip and port to connect to
+def start_data_channel(control_sock):
+    control_sock.send("PASV\r\n".encode())
+    data_response = receive_response(control_sock)
+    verbose(data_response)
+    num_list = data_response.partition('(')[2].partition(')')[0].split(',')  # Partitions and splits the input into a list of just the numbers
+    ip = num_list[0] + '.' + num_list[1] + '.' + num_list[2] + '.' + num_list[3]
+    port = int('{0:08b}'.format(int(num_list[4])) + '{0:08b}'.format(int(num_list[5])), 2)
+    log(ip)
+    log(port)
+
+    return ip, port
+
+def set_data_modes(control_sock):
+    control_sock.send("TYPE I\r\n".encode())
+    verbose(receive_response(control_sock))
+    control_sock.send("MODE S\r\n".encode())
+    verbose(receive_response(control_sock))
+    control_sock.send("STRU F\r\n".encode())
+    verbose(receive_response(control_sock))
 
 # Parses and receives a response from the FTP server. Wait for a \r\n before finishing receiving.
-def receive_response(sock):
-    response = sock.recv(1024)
+def receive_response(control_sock):
+    response = control_sock.recv(1024)
+    decoded = response.decode()
+    while "\r\n" not in decoded:
+        log("looking for further response")
+        response = control_sock.recv(1024)
+        decoded += response.decode()
+    return decoded
 
-    print("to do")
+# Receives a data package from the FTP server. Ends on socket closing, instead of waiting for \r\n.
+def receive_data(data_sock):
+    response = data_sock.recv(1024)
+    return response
+
+
+# ----------------------- Operations -------------------------
+# Performs a LIST FTP request and prints the outputs
+def ls(control_sock, path):
+    log("entering ls")
+    # First send PASV and get data socket properties
+    ip, port = start_data_channel(control_sock)
+
+    # Sending a LIST request before connecting the data channel
+    ls_request = "LIST " + path + "\r\n"
+    control_sock.send(ls_request.encode())
+    data_sock = socket.socket()
+    data_sock.connect((ip, port))
+
+    response = receive_response(control_sock)
+    verbose(response)
+
+    data_response = receive_response(data_sock)
+    print(data_response)
+    return
+
+
+# Performs a MKD FTP request - makes a directory
+def mkdir(control_sock, path):
+    log("entering mkdir")
+    mkdir_request = "MKD " + path + "\r\n"
+    control_sock.send(mkdir_request.encode())
+    response = receive_response(control_sock)
+    verbose(response)
+    return
+
+
+# Performs a RMD FTP request - deletes a directory
+def rmdir(control_sock, path):
+    log("entering rmdir")
+    rmdir_request = "RMD " + path + "\r\n"
+    control_sock.send(rmdir_request.encode())
+    response = receive_response(control_sock)
+    verbose(response)
+    return
+
+def rm(control_sock, path):
+    log("entering rm")
+    rm_request = "DELE " + path + "\r\n"
+    control_sock.send(rm_request.encode()) # NOT SUUUUURE  EE E E E E EEE MIGHT CHANGE
+    response = receive_response(control_sock)
+    verbose(response)
+    return
+
+def cp(control_sock, path1, path2, to_local):
+    log("entering cp")
+    # First send PASV and get data socket properties
+    ip, port = start_data_channel(control_sock)
+    set_data_modes(control_sock)
+
+    if to_local: # Retreive a file from the server and save it locally
+        cp_request = "RETR " + path1 + "\r\n"
+        control_sock.send(cp_request.encode())
+        data_sock = socket.socket()
+        data_sock.connect((ip, port))
+        data_response = receive_data(data_sock)
+        print(type(data_response))
+        print("data response: ", data_response)
+        response = receive_response(control_sock)
+        verbose(response)
+        # Write data to file
+        log(path1)
+        log(path2)
+        file = open(path2, 'wb')
+        file.write(data_response)
+        file.close()
+
+    else: # Copy a local file and save it on the server
+        file = open(path1, 'rb')
+        byte_package = file.read()
+        cp_request = "STOR " + path2 + "\r\n"
+        control_sock.send(cp_request.encode())
+        data_sock = socket.socket()
+        data_sock.connect((ip, port))
+        verbose(receive_response(control_sock))
+        
+    return
+
+# Selects which operation, from ls to mv, to perform based on the argument
+def select_operation(control_sock, path1, path2, to_local):
+    if parser_args.operation == 'ls':
+        ls(control_sock, path1)
+    elif parser_args.operation == 'mkdir':
+        mkdir(control_sock, path1)
+    elif parser_args.operation == 'rm':
+        return
+    elif parser_args.operation == 'rmdir':
+        rmdir(control_sock, path1)
+    elif parser_args.operation == 'cp':
+        cp(control_sock, path1, path2, to_local)
+    elif parser_args.operation == 'mv':
+        return
+    else:
+        raise Exception("Operation error")
+
 
 # Main function of the program - handles the argument inputs and starts the connection with the FTP server
 def ftp_client():
-    print("hello world")
-    print(parser)
-    print(parser_args)
+    verbose("Program start")
+    log(parser)
+    log(parser_args)
 
     op_list = ["ls", "mkdir", "rm", "rmdir", "cp", "mv"]
 
@@ -91,8 +243,7 @@ def ftp_client():
 
     #Exit if an unacceptable operation is given
     if parser_args.operation not in op_list:
-        print("Invalid operation")
-        sys.exit(1)
+        raise Exception("Invalid Operation")
 
     #Exit if the incorrect amount of arguments are passed compared to operation selected
     if (len(parser_args.args) > 2) or (not cp_or_mv and len(parser_args.args) > 1):
@@ -103,15 +254,19 @@ def ftp_client():
         sys.exit(1)
 
     # Parse arguments to retrieve path, username, password
-    hostname, username, password = parse_args()
+    hostname, port, username, password, path1, path2, to_local = parse_args()
 
+    log("port: " + str(port))
     #Start Connection
-    start_connection(hostname, username, password)
-    
+    control_sock = start_connection(hostname, port, username, password)
+
+    select_operation(control_sock, path1, path2, to_local)
 
 
 if __name__ == '__main__':
     ftp_client()
     
 #ftp://ftp.3700.network
-#python 3700ftp ls ftp://kook:O5UCntxHDi7vzdl8Weqh@ftp.3700.network
+#python3 3700ftp ls ftp://kook:O5UCntxHDi7vzdl8Weqh@ftp.3700.network/ -v
+#python3 3700ftp cp ftp://kook:O5UCntxHDi7vzdl8Weqh@ftp.3700.network/hello.txt hello.txt -v
+#login.ccs.neu.edu
